@@ -1,4 +1,4 @@
-name: cpc37
+name: fbcpc37
 channels:
   - pytorch
   - anaconda
@@ -7,7 +7,7 @@ channels:
 dependencies:
   - pytorch
   - torchvision
-  - cudatoolkit=9.2
+  - cudatoolkit=10.1
   - psutil
   - pip
   - openblas-devel

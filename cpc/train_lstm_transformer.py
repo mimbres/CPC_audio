@@ -395,7 +395,7 @@ def parseArgs(argv):
     parser = set_default_cpc_config(parser)
 
     group_db = parser.add_argument_group('Dataset')
-    group_db.add_argument('--pathDB', type=str, default=None,
+    group_db.add_argument('--pathDB', type=str, default='../../CPC_librispeech/dataset/LibriSpeech/train-clean-100/',
                           help='Path to the directory containing the '
                           'data.')
     group_db.add_argument('--file_extension', type=str, default=".flac",
@@ -429,7 +429,7 @@ def parseArgs(argv):
     group_supervised.add_argument('--CTC', action='store_true')
 
     group_save = parser.add_argument_group('Save')
-    group_save.add_argument('--pathCheckpoint', type=str, default=None,
+    group_save.add_argument('--pathCheckpoint', type=str, default='./exp_100_lstm_transformer/',
                             help="Path of the output directory.")
     group_save.add_argument('--logging_step', type=int, default=1000)
     group_save.add_argument('--save_step', type=int, default=5,
@@ -490,5 +490,9 @@ def parseArgs(argv):
 
 if __name__ == "__main__":
     torch.multiprocessing.set_start_method('spawn')
+    #torch.multiprocessing.set_sharing_strategy('file_system')
+    #import resource
+    #rlimit = resource.getrlimit(resource.RLIMIT_NOFILE)
+    #resource.setrlimit(resource.RLIMIT_NOFILE, (9999, rlimit[1])) # this solved problem!!
     args = sys.argv[1:]
     main(args)
