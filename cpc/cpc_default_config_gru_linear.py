@@ -71,13 +71,13 @@ def set_default_cpc_config(parser):
     group.add_argument('--speakerEmbedding', type=int, default=0,
                        help="(Depreciated) Feed the prediction network with "
                        "speaker embeddings along with the usual sequence.")
-    group.add_argument('--arMode', default='LSTM',
+    group.add_argument('--arMode', default='GRU',
                        choices=['GRU', 'LSTM', 'RNN', 'no_ar', 'transformer'],
                        help="Architecture to use for the auto-regressive "
                        "network (default is lstm).")
     group.add_argument('--nLevelsGRU', type=int, default=1,
                        help='Number of layers in the autoregressive network.')
-    group.add_argument('--rnnMode', type=str, default='transformer',
+    group.add_argument('--rnnMode', type=str, default='linear',
                        choices=['transformer', 'RNN', 'LSTM', 'linear',
                                 'ffd', 'conv4', 'conv8', 'conv12'],
                        help="Architecture to use for the prediction network")
