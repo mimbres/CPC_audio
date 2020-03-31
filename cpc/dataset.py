@@ -230,7 +230,7 @@ class AudioBatchData(Dataset):
         Get a batch sampler for the current dataset.
         Args:
             - batchSize (int): batch size
-            - groupSize (int): in the case of type in ["speaker", "sequence"]
+            - groupSize (int): in the case of type in ["samespeaker", "samesequence"]
             number of items sharing a same label in the group
             (see AudioBatchSampler)
             - type (string):
