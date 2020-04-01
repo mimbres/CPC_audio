@@ -90,8 +90,8 @@ class LibriSelectionDataset(Dataset):
     def __init__(self,
                  sizeWindow=20480,
                  db_wav_root=DB_WAV_ROOT,
-                 fps_list=TS_LIST_PATH,
-                 label_path=LABEL_PATH,
+                 fps_list=str(),
+                 label_path=str(),
                  nSpeakers=-1,
                  n_process_loader=4,
                  MAX_SIZE_LOADED=4000000000):
@@ -114,7 +114,7 @@ class LibriSelectionDataset(Dataset):
 
         """Parsing customized to Libri-selection dataset."""
         fps_name_only = get_fps_from_txt(fps_list)
-        label_dict = np.load(LABEL_PATH, allow_pickle=True)[()]
+        label_dict = np.load(label_path, allow_pickle=True)[()]
         self.all_labels_fps = [(label_dict[x], Path(db_wav_root) / Path(x)) for x in fps_name_only]
         
         self.reload_pool = Pool(n_process_loader)
@@ -302,15 +302,33 @@ class LibriSelectionDataset(Dataset):
 
 
 #%%
-db_test = LibriSelectionDataset(sizeWindow=20480, db_wav_root=DB_WAV_ROOT, 
-                                 fps_list=TS_LIST_PATH, label_path=LABEL_PATH,
-                                 n_process_loader=2, MAX_SIZE_LOADED=40000000)
-                                 
-test_loader = db_test.getDataLoader(batchSize=8, type='sequential',
-                                    randomOffset=False, numWorkers=0)
-
-for step, (batch_data, label) in enumerate(test_loader):
-    print(label)
-    if step>20: break;
+def unit_test():
+    #[key for key in label_dict if (label_dict[key] == 355)]
+    torch.multiprocessing.set_sharing_strategy('file_system')
     
-label
+    db_test = LibriSelectionDataset(sizeWindow=20480*5, db_wav_root=DB_WAV_ROOT, 
+                                     fps_list=TS_LIST_PATH, label_path=LABEL_PATH,
+                                     n_process_loader=2, MAX_SIZE_LOADED=40000000)
+    
+    db_train = LibriSelectionDataset(sizeWindow=20480, db_wav_root=DB_WAV_ROOT, 
+                                     fps_list=TR_LIST_PATH, label_path=LABEL_PATH,
+                                     n_process_loader=4, MAX_SIZE_LOADED=400000000)
+    
+    # type = ['samespeaker', 'samesequence', 'sequential']
+    test_loader = db_test.getDataLoader(batchSize=8, type='samespeaker',
+                                        randomOffset=False, numWorkers=0)
+    
+    train_loader = db_train.getDataLoader(batchSize=64, type='sequqential',
+                                         randomOffset=False, numWorkers=0)
+    
+    
+    for step, (batch_data, label) in enumerate(train_loader):
+        #if (len(label) < 2): print(label)
+        if (123 in label): break;
+    print(label)
+        
+    for step, (batch_data, label) in enumerate(test_loader):
+        if label[0]==123: break;
+
+    
+

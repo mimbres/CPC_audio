@@ -1,3 +1,4 @@
+cpc/eval/.spyproject
 cpc/exp*
 __pycache__
 *.pyc

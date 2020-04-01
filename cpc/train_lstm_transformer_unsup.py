@@ -246,6 +246,12 @@ def main(args):
     print(f'CONFIG:\n{json.dumps(vars(args), indent=4, sort_keys=True)}')
     print('-' * 50)
 
+    """Modified by mimbres 2020.04.01."""
+    os.makedirs(args.pathCheckpoint, exist_ok=True)
+    with open(f"{args.pathCheckpoint}/checkpoint_args.json", 'w') as f:
+        json.dump(args.__dict__, f, indent=2)
+
+
     seqNames, speakers = findAllSeqs(args.pathDB,
                                      extension=args.file_extension,
                                      loadCache=not args.ignore_cache)
