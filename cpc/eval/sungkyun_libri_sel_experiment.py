@@ -94,7 +94,7 @@ def train_step(feat_gen, clf, train_loader, optimizer, ep='unknown'):
         loss.backward()
         
         optimizer.step()
-        print(f'Ep={ep}, Iter={i}, loss={loss.item()}')
+        #print(f'Ep={ep}, Iter={i}, loss={loss.item()}')
     return loss.item()
 
 
@@ -106,4 +106,4 @@ for ep in range(MAX_EPOCHS):
     logs_train = train_step(feat_gen, clf, train_loader, optimizer, ep)
     #logs_val = val_step(feature_maker, criterion, val_loader)
     #logs = {"epoch": [], "iter": [], "saveStep": -1} # saveStep=-1, save only best checkpoint!
-    
+    print(f'Ep={ep}, loss={logs_train}')
