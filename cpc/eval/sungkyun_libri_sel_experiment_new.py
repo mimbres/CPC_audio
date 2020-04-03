@@ -15,14 +15,19 @@ Dependency:
 Created on Wed Apr  1 14:57:05 2020
 @author: skchang@cochlear.ai
 """
+from copy import deepcopy
+import time
+import os
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import cpc.utils.misc as utils
 import cpc.feature_loader as fl
-from cpc.eval.sungkyun_classifier import MLP, MobileNetV2 
+from cpc.eval.sungkyun_classifier import MLP, MobileNetV2, SpeakerClf 
+#from cpc.eval.sungkyun_libri_sel_dataloader import LibriSelectionDataset
 from cpc.eval.sungkyun_libri_sel_dataloader import LibriSelectionDataset
-torch.multiprocessing.set_sharing_strategy('file_system') 
+torch.multiprocessing.set_sharing_strategy('file_system')
 # This was required for preventing multiprocessing errors.
 
 
@@ -30,6 +35,8 @@ torch.multiprocessing.set_sharing_strategy('file_system')
 SEL_FEAT = 'c' # or 'c' or 'z'
 CPC_CHECKPOINT_PATH = '../exp_100_gru_linear/checkpoint_95.pt' #../exp_100_lstm_transformer_unsup/'
 MAX_EPOCHS = 2000
+SAVE_PATH = './exp_libri_sel/clf_checkpoint'
+os.makedirs(SAVE_PATH, exist_ok=True)
 
 DB_WAV_ROOT = './Speaker_ID_DB/Libri-from-sincnet/Librispeech_spkid_sel/'
 TR_LIST_PATH = './Speaker_ID_DB/Libri-from-sincnet/libri_tr.scp'
@@ -41,8 +48,14 @@ nGPU = torch.cuda.device_count()
 """Data loading..."""
 db_train = LibriSelectionDataset(sizeWindow=20480, db_wav_root=DB_WAV_ROOT, 
                                  fps_list=TR_LIST_PATH, label_path=LABEL_PATH,
-                                 n_process_loader=50, MAX_SIZE_LOADED=400000000)
+                                 n_process_loader=8, MAX_SIZE_LOADED=400000000)
 train_loader = db_train.getDataLoader(batchSize=64, type='uniform', #'sequential',
+                                     randomOffset=False, numWorkers=0)
+
+db_test = LibriSelectionDataset(sizeWindow=20480, db_wav_root=DB_WAV_ROOT, 
+                                 fps_list=TS_LIST_PATH, label_path=LABEL_PATH,
+                                 n_process_loader=8, MAX_SIZE_LOADED=400000000)
+test_loader = db_test.getDataLoader(batchSize=128, type='sequential', #'sequential',
                                      randomOffset=False, numWorkers=0)
 
 
@@ -57,10 +70,12 @@ feat_gen.eval()
 for g in feat_gen.parameters():
     g.requires_grad = False
 
+
 """Create classifier: clf()"""
 d_feat = int('c' in SEL_FEAT) * d_c + int('z' in SEL_FEAT) * d_z
 n_classes = len(db_train.speakers)
-clf = MLP(d_feat, 2048, n_classes)
+#clf = MLP(d_feat, 2048, n_classes)
+clf = SpeakerClf(d_feat, n_classes)
 if nGPU > 0:
     clf = clf.cuda()
     clf = torch.nn.DataParallel(clf, device_ids=range(nGPU))
@@ -99,33 +114,94 @@ if nGPU > 0:
 #         #print(f'Ep={ep}, Iter={i}, loss={loss.item()}')
 #     return loss.item()
 def train_step(feat_gen, clf, train_loader, optimizer, ep='unknown'):
-    feat_gen = feat_gen.eval()
-    clf = clf.train()
-    loss_func = nn.CrossEntropyLoss()
+    feat_gen.eval()
+    clf.train()
+    #loss_func = nn.CrossEntropyLoss()
+    logs = {"locLoss_train": 0,  "locAcc_train": 0}
     for i, (batch_data, labels) in enumerate(train_loader):
         #if i>3: break; # batch_data:(B,1,20480), labels:(B)
         c, z, _ = feat_gen(batch_data, None) # c:(B,128,256), z:(B:128,256) (B,T,F)
         c = c.detach()
         z = z.detach()
-        c = c[:,-1, :]
+        #c = c[:,-1, :]
         
         # Predict --> loss
         optimizer.zero_grad()
         
-        logit = clf(c) # logit: (B,Class)
-        loss = loss_func(logit, labels.cuda()).view(1, -1)
-        loss.backward() 
+        #logit = clf(c) # logit: (B,Class)
+        #loss = loss_func(logit, labels.cuda()).view(1, -1)
+        all_losses, all_acc = clf(c, None, labels)
+        totLoss = all_losses.sum()
+        totLoss.backward() 
         optimizer.step()
-        acc = (logit.detach().cpu().max(1)[1] == labels).double().mean().view(1, -1)
-    return loss.item(), acc
+        #acc = (logit.detach().cpu().max(1)[1] == labels).double().mean().view(1, -1)
+        logs["locLoss_train"] += np.asarray([all_losses.mean().item()])
+        logs["locAcc_train"] += np.asarray([all_acc.mean().item()])
 
+    logs = utils.update_logs(logs, i)
+    logs["iter"] = i
 
+    return logs
+
+def test_step(feat_gen, clf, test_loader, optimizer, ep='unknown'):
+    feat_gen.eval()
+    clf.eval()
+
+    logs = {"locLoss_test": 0,  "locAcc_test": 0}
+    for i, (batch_data, labels) in enumerate(train_loader):
+        #if i>3: break; # batch_data:(B,1,20480), labels:(B)
+        c, z, _ = feat_gen(batch_data, None) # c:(B,128,256), z:(B:128,256) (B,T,F)
+        c = c.detach()
+        z = z.detach()
+        
+        # Predict --> loss
+        all_losses, all_acc = clf(c, None, labels)
+        logs["locLoss_test"] += np.asarray([all_losses.mean().item()])
+        logs["locAcc_test"] += np.asarray([all_acc.mean().item()])
+
+    logs = utils.update_logs(logs, i)
+    logs["iter"] = i
+
+    return logs
         
 
 """Train."""
-optimizer = torch.optim.Adam(list(clf.parameters()), lr=2e-4, betas=(0.9, 0.999), eps=2e-8)
+logs = {"epoch": []}
+optimizer = torch.optim.Adam(list(clf.parameters()), lr=2e-3, betas=(0.9, 0.999), eps=2e-8)
+best_acc = -1
+start_time = time.time()
 for ep in range(MAX_EPOCHS):
-    loss_train, acc_train = train_step(feat_gen, clf, train_loader, optimizer, ep)
+    logs_train = train_step(feat_gen, clf, train_loader, optimizer, ep)
     #logs_val = val_step(feature_maker, criterion, val_loader)
     #logs = {"epoch": [], "iter": [], "saveStep": -1} # saveStep=-1, save only best checkpoint!
-    print(f'Ep={ep}, loss={loss_train}, acc={acc_train}')
+    logs_test = test_step(feat_gen, clf, test_loader, optimizer, ep)
+    print('')
+    print('_'*50)
+    print(f'Ran {ep + 1} epochs '
+          f'in {time.time() - start_time:.2f} seconds')
+    utils.show_logs("Training loss", logs_train)
+    utils.show_logs("Test loss", logs_test)
+    print('_'*50)
+    print('')
+    
+    if logs_test["locAcc_test"] > best_acc:
+        best_state = deepcopy(fl.get_module(feat_gen).state_dict())
+        best_acc = logs_test["locAcc_test"]
+    
+    logs["epoch"].append(ep)
+    for key, value in dict(logs_train, **logs_test).items():
+        if key not in logs:
+            logs[key] = [None for x in range(ep)]
+        if isinstance(value, np.ndarray):
+            value = value.tolist()
+        logs[key].append(value)
+ 
+    if (ep % 10 == 0 and ep > 0) or ep == MAX_EPOCHS - 1:
+        feat_gen_state_dict = fl.get_module(feat_gen).state_dict()
+        clf_state_dict = fl.get_module(clf).state_dict()
+
+        fl.save_checkpoint(feat_gen_state_dict, clf_state_dict,
+                           optimizer.state_dict(), best_state,
+                           f"{SAVE_PATH}_{ep}.pt")
+        utils.save_logs(logs, f"{SAVE_PATH}_logs.json")
+

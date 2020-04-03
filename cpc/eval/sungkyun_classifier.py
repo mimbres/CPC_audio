@@ -9,18 +9,50 @@ Created on Wed Apr  1 19:39:33 2020
 """
 from torch import nn
 from torch.nn import functional as F
+class BaseCriterion(nn.Module):
+
+    def warmUp(self):
+        return False
+
+    def update(self):
+        return
+
+class SpeakerClf(BaseCriterion):
+
+    def __init__(self, dimEncoder, nSpeakers):
+
+        super(SpeakerClf, self).__init__()
+        self.linearSpeakerClassifier = nn.Linear(
+            dimEncoder, nSpeakers)
+        self.lossCriterion = nn.CrossEntropyLoss()
+        self.entropyCriterion = nn.LogSoftmax(dim=1)
+
+    def forward(self, cFeature, otherEncoded, label):
+
+        # cFeature.size() : batchSize x seq Size x hidden size
+        batchSize = cFeature.size(0)
+        cFeature = cFeature[:, -1, :]
+        cFeature = cFeature.view(batchSize, -1)
+        predictions = self.linearSpeakerClassifier(cFeature)
+
+        loss = self.lossCriterion(predictions, label).view(1, -1)
+        acc = (predictions.max(1)[1] == label).double().mean().view(1, -1)
+
+        return loss, acc
 
 
 class MLP(nn.Module):
     def __init__(self, d_in, d_hidden, num_classes, bias=True):
         super().__init__()
-        self.hidden = nn.Linear(d_in, d_hidden, bias)
-        self.output = nn.Linear(d_hidden, num_classes, bias)
-    
+#self.hidden = nn.Linear(d_in, d_hidden, bias)
+#self.output = nn.Linear(d_hidden, num_classes, bias)
+        self.single_output = nn.Linear(d_in, num_classes)
+
     def forward(self, x):
-        x = self.hidden(x)
-        x = F.relu(x)
-        return self.output(x)
+        #x = self.hidden(x)
+        #x = F.relu(x)
+        #return self.output(x)
+        return self.single_output(x)
     
 #%% MobileNetV2
 """MobileNetV2.
@@ -172,6 +204,8 @@ class MobileNetV2(nn.Module):
                 nn.init.normal_(m.weight, 0, 0.01)
                 nn.init.zeros_(m.bias)
 
+        self.lossCriterion = nn.CrossEntropyLoss()
+
     def _forward_impl(self, x):
         # This exists since TorchScript doesn't support inheritance, so the superclass method
         # (this one) needs to have a name other than `forward` that can be accessed in a subclass
@@ -182,4 +216,10 @@ class MobileNetV2(nn.Module):
         return x
 
     def forward(self, x):
-        return self._forward_impl(x)
+        #return self._forward_impl(x)
+        predictions = self._forward_impl(x)
+        loss = self.lossCriterion(predictions, label).view(1, -1)
+        acc = (predictions.max(1)[1] == label).double().mean().view(1, -1)
+        return loss, acc
+
+

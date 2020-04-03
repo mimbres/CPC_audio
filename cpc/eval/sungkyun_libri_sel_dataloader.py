@@ -93,7 +93,7 @@ class LibriSelectionDataset(Dataset):
                  fps_list=str(),
                  label_path=str(),
                  nSpeakers=-1,
-                 n_process_loader=4,
+                 n_process_loader=50,
                  MAX_SIZE_LOADED=4000000000):
         """Init.
         
@@ -314,11 +314,11 @@ def unit_test():
                                      fps_list=TR_LIST_PATH, label_path=LABEL_PATH,
                                      n_process_loader=4, MAX_SIZE_LOADED=400000000)
     
-    # type = ['samespeaker', 'samesequence', 'sequential']
+    # type = ['samespeaker', 'samesequence', 'sequential', 'uniform']
     test_loader = db_test.getDataLoader(batchSize=8, type='samespeaker',
                                         randomOffset=False, numWorkers=0)
     
-    train_loader = db_train.getDataLoader(batchSize=64, type='sequqential',
+    train_loader = db_train.getDataLoader(batchSize=64, type='sequential',
                                          randomOffset=False, numWorkers=0)
     
     
